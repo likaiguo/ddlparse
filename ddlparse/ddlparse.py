@@ -13,9 +13,10 @@ from enum import IntEnum
 
 from pyparsing import CaselessKeyword, Forward, Word, Regex, alphanums, \
     delimitedList, Suppress, Optional, Group, OneOrMore
+import six
 
 
-class DdlParseBase():
+class DdlParseBase(object):
 
     NAME_CASE = IntEnum("NAME_CASE", "original lower upper")
     DATABASE = IntEnum("DATABASE", "mysql, postgresql, oracle, redshift")
@@ -40,7 +41,10 @@ class DdlParseBase():
 class DdlParseTableColumnBase(DdlParseBase):
 
     def __init__(self, source_database=None):
-        super().__init__(source_database)
+        if six.PY3:
+            super().__init__(source_database)
+        else:
+            super(DdlParseTableColumnBase, self).__init__(source_database)
         self._name = ""
 
     @property
@@ -80,7 +84,10 @@ class DdlParseColumn(DdlParseTableColumnBase):
         :param constraint: Column constraint string
         :param source_database: enum DdlParse.DATABASE
         """
-        super().__init__(source_database)
+        if six.PY3:
+            super().__init__(source_database)
+        else:
+            super(DdlParseColumn, self).__init__(source_database)
         self._name = name
         self._set_data_type(data_type_array)
         self.constraint = constraint
@@ -249,14 +256,24 @@ class DdlParseColumnDict(OrderedDict, DdlParseBase):
     """
 
     def __init__(self, source_database=None):
-        super().__init__()
+        if six.PY3:
+            super().__init__()
+        else:
+            super(DdlParseColumnDict, self).__init__()
+
         self.source_database = source_database
 
     def __getitem__(self, key):
-        return super().__getitem__(key.lower())
+        if six.PY3:
+            return super().__getitem__(key.lower())
+        else:
+            return super(DdlParseColumnDict, self).__getitem__(key.lower())
 
     def __setitem__(self, key, value):
-        super().__setitem__(key.lower(), value)
+        if six.PY3:
+            super().__setitem__(key.lower(), value)
+        else:
+            super(DdlParseColumnDict, self).__setitem__(key.lower(), value)
 
     def append(self, column_name, data_type_array=None, constraint=None, source_database=None):
         if source_database is None:
@@ -290,7 +307,11 @@ class DdlParseTable(DdlParseTableColumnBase):
     """Table define info"""
 
     def __init__(self, source_database=None):
-        super().__init__(source_database)
+        if six.PY3:
+            super().__init__(source_database)
+        else:
+            super(DdlParseTable, self).__init__(source_database)
+
         self._schema = None
         self._columns = DdlParseColumnDict(source_database)
 
@@ -301,11 +322,15 @@ class DdlParseTable(DdlParseTableColumnBase):
 
         :param source_database: enum DdlParse.DATABASE
         """
-        return super().source_database
+        if six.PY3:
+            return super().source_database
+        else:
+            return super(DdlParseTable, self).source_database
 
     @source_database.setter
     def source_database(self, source_database):
         super(self.__class__, self.__class__).source_database.__set__(self, source_database)
+
         self._columns.source_database = source_database
 
     @property
@@ -424,7 +449,10 @@ class DdlParse(DdlParseBase):
 
 
     def __init__(self, ddl=None, source_database=None):
-        super().__init__(source_database)
+        if six.PY3:
+            super().__init__(source_database)
+        else:
+            super(DdlParse, self).__init__(source_database)
         self._ddl = ddl
         self._table = DdlParseTable(source_database)
 
@@ -435,7 +463,10 @@ class DdlParse(DdlParseBase):
 
         :param source_database: enum DdlParse.DATABASE
         """
-        return super().source_database
+        if six.PY3:
+            return super().source_database
+        else:
+            return super(DdlParse, self).source_database
 
     @source_database.setter
     def source_database(self, source_database):
