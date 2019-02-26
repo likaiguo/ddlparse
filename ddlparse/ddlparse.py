@@ -17,7 +17,6 @@ import six
 
 
 class DdlParseBase(object):
-
     NAME_CASE = IntEnum("NAME_CASE", "original lower upper")
     DATABASE = IntEnum("DATABASE", "mysql, postgresql, oracle, redshift")
 
@@ -78,9 +77,10 @@ class DdlParseTableColumnBase(DdlParseBase):
 class DdlParseColumn(DdlParseTableColumnBase):
     """Column define info"""
 
-    def __init__(self, name, data_type_array, constraint=None, source_database=None):
+    def __init__(self, name, data_type_array, constraint=None, source_database=None, comment=None):
         """
-        :param data_type_array[]: Column data type ['data type name'] or ['data type name', '(length)'] or ['data type name', '(precision, scale)']
+        :param data_type_array[]: Column data type ['data type name'] or ['data type name', '(length)'] or ['data
+        type name', '(precision, scale)']
         :param constraint: Column constraint string
         :param source_database: enum DdlParse.DATABASE
         """
@@ -90,11 +90,22 @@ class DdlParseColumn(DdlParseTableColumnBase):
             super(DdlParseColumn, self).__init__(source_database)
         self._name = name
         self._set_data_type(data_type_array)
+        self._set_comment(comment)
         self.constraint = constraint
 
     @property
     def data_type(self):
         return self._data_type
+
+    @property
+    def comment(self):
+        return self._comment
+
+    def _set_comment(self, comment):
+        if comment and len(comment) > 0:
+            self._comment = comment[0].upper()
+        else:
+            self._comment = ''
 
     @property
     def length(self):
@@ -119,10 +130,10 @@ class DdlParseColumn(DdlParseTableColumnBase):
         matches = re.findall(r"(\d+)\s*,*\s*(\d*)", data_type_array[1])
         if len(matches) > 0:
             self._length = int(matches[0][0])
-            self._scale = None if len(matches[0]) < 2 or matches[0][1] == "" or int(matches[0][1]) == 0 else int(matches[0][1])
+            self._scale = None if len(matches[0]) < 2 or matches[0][1] == "" or int(matches[0][1]) == 0 else int(
+                matches[0][1])
         else:
             self._data_type += " {}".format(data_type_array[1])
-
 
     @property
     def constraint(self):
@@ -139,7 +150,8 @@ class DdlParseColumn(DdlParseTableColumnBase):
     def constraint(self, constraint):
         self._constraint = None if constraint is None else constraint.upper()
 
-        self._not_null = False if self._constraint is None or not re.search(r"(NOT NULL|PRIMARY KEY)", self._constraint) else True
+        self._not_null = False if self._constraint is None or not re.search(r"(NOT NULL|PRIMARY KEY)",
+                                                                            self._constraint) else True
         self._pk = False if self._constraint is None or not re.search("PRIMARY KEY", self._constraint) else True
         self._unique = False if self._constraint is None or not re.search("UNIQUE", self._constraint) else True
 
@@ -173,7 +185,7 @@ class DdlParseColumn(DdlParseTableColumnBase):
 
         # BigQuery data type = {source_database: [data type, ...], ...}
         BQ_DATA_TYPE_DIC = OrderedDict()
-        BQ_DATA_TYPE_DIC["STRING"] = {None: [re.compile(r"(CHAR|TEXT|CLOB)")]}
+        BQ_DATA_TYPE_DIC["STRING"] = {None: [re.compile(r"(CHAR|TEXT|CLOB|STRING)")]}
         BQ_DATA_TYPE_DIC["INTEGER"] = {None: [re.compile(r"INT|SERIAL|YEAR")]}
         BQ_DATA_TYPE_DIC["FLOAT"] = {None: [re.compile(r"(FLOAT|DOUBLE)"), "REAL", "MONEY"]}
         BQ_DATA_TYPE_DIC["DATETIME"] = {
@@ -191,13 +203,13 @@ class DdlParseColumn(DdlParseTableColumnBase):
 
                     if isinstance(source_datatype, str):
                         if self._data_type == source_datatype \
-                            and (  self._source_database == source_db
-                                or (self._source_database is not None and source_db is None)):
+                                and (self._source_database == source_db
+                                     or (self._source_database is not None and source_db is None)):
                             return bq_type
 
                     elif re.search(source_datatype, self._data_type) \
-                        and (  self._source_database == source_db
-                            or (self._source_database is not None and source_db is None)):
+                            and (self._source_database == source_db
+                                 or (self._source_database is not None and source_db is None)):
                         return bq_type
 
         if self._data_type in ["NUMERIC", "NUMBER", "DECIMAL"]:
@@ -205,8 +217,8 @@ class DdlParseColumn(DdlParseTableColumnBase):
                 return "FLOAT"
 
             if self._data_type == "NUMBER" \
-                and self._source_database == self.DATABASE.oracle \
-                and self._length is None:
+                    and self._source_database == self.DATABASE.oracle \
+                    and self._length is None:
                 return "FLOAT"
 
             return "INTEGER"
@@ -243,7 +255,8 @@ class DdlParseColumn(DdlParseTableColumnBase):
     def to_bigquery_field(self, name_case=DdlParseBase.NAME_CASE.original):
         """Generate BigQuery JSON field define"""
 
-        return '{{"name": "{}", "type": "{}", "mode": "{}"}}'.format(self.get_name(name_case), self.bigquery_data_type, self.bigquery_mode)
+        return '{{"name": "{}", "type": "{}", "mode": "{}"}}'.format(self.get_name(name_case), self.bigquery_data_type,
+                                                                     self.bigquery_mode)
 
 
 class DdlParseColumnDict(OrderedDict, DdlParseBase):
@@ -275,11 +288,11 @@ class DdlParseColumnDict(OrderedDict, DdlParseBase):
         else:
             super(DdlParseColumnDict, self).__setitem__(key.lower(), value)
 
-    def append(self, column_name, data_type_array=None, constraint=None, source_database=None):
+    def append(self, column_name, data_type_array=None, constraint=None, source_database=None, comment=None):
         if source_database is None:
             source_database = self.source_database
 
-        column = DdlParseColumn(column_name, data_type_array, constraint, source_database)
+        column = DdlParseColumn(column_name, data_type_array, constraint, source_database, comment=comment)
         self.__setitem__(column_name, column)
         return column
 
@@ -302,6 +315,10 @@ class DdlParseColumnDict(OrderedDict, DdlParseBase):
 
         return "[{}]".format(",".join(bq_fields))
 
+    def to_dict(self):
+
+        return OrderedDict([(col.name, col.data_type) for col in self.values()])
+
 
 class DdlParseTable(DdlParseTableColumnBase):
     """Table define info"""
@@ -314,6 +331,7 @@ class DdlParseTable(DdlParseTableColumnBase):
 
         self._schema = None
         self._columns = DdlParseColumnDict(source_database)
+        self._partitions = DdlParseColumnDict(source_database)
 
     @property
     def source_database(self):
@@ -355,6 +373,11 @@ class DdlParseTable(DdlParseTableColumnBase):
     def columns(self):
         """DdlParseColumn dictionary collection"""
         return self._columns
+
+    @property
+    def partitions(self):
+        """DdlParseColumn dictionary collection"""
+        return self._partitions
 
     def to_bigquery_fields(self, name_case=DdlParseBase.NAME_CASE.original):
         """
@@ -410,43 +433,77 @@ class DdlParse(DdlParseBase):
     """DDL parser"""
 
     _LPAR, _RPAR, _COMMA, _SEMICOLON, _DOT, _DOUBLEQUOTE, _BACKQUOTE, _SPACE = map(Suppress, "(),;.\"` ")
-    _CREATE, _TABLE, _TEMP, _CONSTRAINT, _NOT_NULL, _PRIMARY_KEY, _UNIQUE, _UNIQUE_KEY, _KEY, _CHAR_SEMANTICS, _BYTE_SEMANTICS = \
-        map(CaselessKeyword, "CREATE, TABLE, TEMP, CONSTRAINT, NOT NULL, PRIMARY KEY, UNIQUE, UNIQUE KEY, KEY, CHAR, BYTE".replace(", ", ",").split(","))
+    _CREATE, _TABLE, _TEMP, _CONSTRAINT, _NOT_NULL, _PRIMARY_KEY, _UNIQUE, _UNIQUE_KEY, _KEY, _CHAR_SEMANTICS, \
+    _BYTE_SEMANTICS = \
+        map(CaselessKeyword,
+            "CREATE, TABLE, TEMP, CONSTRAINT, NOT NULL, PRIMARY KEY, UNIQUE, UNIQUE KEY, KEY, CHAR, BYTE".replace(", ",
+                                                                                                                  ",").split(
+                ","))
     _SUPPRESS_QUOTE = _BACKQUOTE | _DOUBLEQUOTE
 
     _COMMENT = Suppress("--" + Regex(r".+"))
 
-    _CREATE_TABLE_STATEMENT = Suppress(_CREATE) + Optional(_TEMP)("temp") + Suppress(_TABLE) + Optional(Suppress(CaselessKeyword("IF NOT EXISTS"))) \
-        + Optional(_SUPPRESS_QUOTE) + Optional(Word(alphanums+"_")("schema") + Optional(_SUPPRESS_QUOTE) + _DOT + Optional(_SUPPRESS_QUOTE)) + Word(alphanums+"_<>")("table") + Optional(_SUPPRESS_QUOTE) \
-        + _LPAR \
-        + delimitedList(
-            OneOrMore(
-                # Ignore Index
-                Suppress(_KEY + Word(alphanums+"_'`() "))
-                |
-                Group(
-                    Optional(Suppress(_CONSTRAINT) + Optional(_SUPPRESS_QUOTE) + Word(alphanums+"_")("name") + Optional(_SUPPRESS_QUOTE))
-                    + (_PRIMARY_KEY ^ _UNIQUE ^ _UNIQUE_KEY ^ _NOT_NULL)("type")
-                    + Optional(_SUPPRESS_QUOTE) + Optional(Word(alphanums+"_"))("name") + Optional(_SUPPRESS_QUOTE)
-                    + _LPAR + Group(delimitedList(Optional(_SUPPRESS_QUOTE) + Word(alphanums+"_") + Optional(_SUPPRESS_QUOTE)))("constraint_columns") + _RPAR
-                )("constraint")
-                |
-                Group(
-                    Optional(_COMMENT)
-                    + Optional(_SUPPRESS_QUOTE) + Word(alphanums+"_")("name") + Optional(_SUPPRESS_QUOTE)
-                    + Group(
-                          Word(alphanums+"_")
-                        + Optional(CaselessKeyword("WITHOUT TIME ZONE") ^ CaselessKeyword("WITH TIME ZONE") ^ CaselessKeyword("PRECISION"))
-                        + Optional(_LPAR + Regex(r"\d+\s*,*\s*\d*") + Optional(Suppress(_CHAR_SEMANTICS | _BYTE_SEMANTICS)) + _RPAR)
-                        )("type")
-                    + Optional(Word(alphanums+"_': -"))("constraint")
-                )("column")
-            )
-        )("columns")
+    COMMENT = Suppress(CaselessKeyword("COMMENT")) + Regex(r"""['"](.*|([^'"]*[\r\n]?)*)['"]""")("comment")
+
+    partition = Suppress(CaselessKeyword('PARTITIONED BY')) + _LPAR + delimitedList(
+        OneOrMore(
+            Group(
+                Optional(_COMMENT)
+                + Optional(_SUPPRESS_QUOTE) + Word(alphanums + "_")("name") + Optional(_SUPPRESS_QUOTE)
+                + Group(
+                    Word(alphanums + "_")
+                    + Optional(
+                        CaselessKeyword("WITHOUT TIME ZONE") ^ CaselessKeyword("WITH TIME ZONE") ^ CaselessKeyword(
+                            "PRECISION"))
+                    + Optional(
+                        _LPAR + Regex(r"\d+\s*,*\s*\d*") + Optional(
+                            Suppress(_CHAR_SEMANTICS | _BYTE_SEMANTICS)) + _RPAR)
+                )("type")
+                + Optional(COMMENT)
+
+            )("partition")
+        )
+    )("partitions")
+
+    _CREATE_TABLE_STATEMENT = Suppress(_CREATE) + Optional(_TEMP)("temp") + Suppress(_TABLE) + Optional(
+        Suppress(CaselessKeyword("IF NOT EXISTS"))) \
+                              + Optional(_SUPPRESS_QUOTE) + Optional(
+        Word(alphanums + "_")("schema") + Optional(_SUPPRESS_QUOTE) + _DOT + Optional(_SUPPRESS_QUOTE)) + Word(
+        alphanums + "_<>")("table") + Optional(_SUPPRESS_QUOTE) \
+                              + _LPAR \
+                              + delimitedList(
+        OneOrMore(
+            # Ignore Index
+            Suppress(_KEY + Word(alphanums + "_'`() "))
+            |
+            Group(
+                Optional(Suppress(_CONSTRAINT) + Optional(_SUPPRESS_QUOTE) + Word(alphanums + "_")("name") + Optional(
+                    _SUPPRESS_QUOTE))
+                + (_PRIMARY_KEY ^ _UNIQUE ^ _UNIQUE_KEY ^ _NOT_NULL)("type")
+                + Optional(_SUPPRESS_QUOTE) + Optional(Word(alphanums + "_"))("name") + Optional(_SUPPRESS_QUOTE)
+                + _LPAR + Group(
+                    delimitedList(Optional(_SUPPRESS_QUOTE) + Word(alphanums + "_") + Optional(_SUPPRESS_QUOTE)))(
+                    "constraint_columns")
+            )("constraint")
+            |
+            Group(
+                Optional(_COMMENT)
+                + Optional(_SUPPRESS_QUOTE) + Word(alphanums + "_")("name") + Optional(_SUPPRESS_QUOTE)
+                + Group(
+                    Word(alphanums + "_")
+                    + Optional(
+                        CaselessKeyword("WITHOUT TIME ZONE") ^ CaselessKeyword("WITH TIME ZONE") ^ CaselessKeyword(
+                            "PRECISION"))
+                    + Optional(_LPAR + Regex(r"\d+\s*,*\s*\d*") + Optional(Suppress(_CHAR_SEMANTICS | _BYTE_SEMANTICS)))
+                )("type")
+                # + Optional(Word(alphanums+"_': -"))("constraint")
+                + Optional(COMMENT)("comment")
+            )("column")
+        )
+    )("columns") + _RPAR + Optional(COMMENT) + Optional(partition) + Optional(COMMENT)
 
     _DDL_PARSE_EXPR = Forward()
     _DDL_PARSE_EXPR << OneOrMore(_COMMENT | _CREATE_TABLE_STATEMENT)
-
 
     def __init__(self, ddl=None, source_database=None):
         if six.PY3:
@@ -514,6 +571,7 @@ class DdlParse(DdlParseBase):
                 # add column
                 col = self._table.columns.append(
                     column_name=ret_col["name"],
+                    comment=ret_col.get("comment"),
                     data_type_array=ret_col["type"])
 
                 if "constraint" in ret_col:
@@ -531,5 +589,14 @@ class DdlParse(DdlParseBase):
                         col.unique = True
                     elif ret_col["type"] == "NOT NULL":
                         col.not_null = True
+        for ret_col in ret.get("partitions", []):
+            if ret_col.getName() == "partition":
+                # add partiton
+                col = self._table.partitions.append(
+                    column_name=ret_col["name"],
+                    data_type_array=ret_col["type"])
+
+            if "constraint" in ret_col:
+                col.constraint = ret_col["constraint"]
 
         return self._table
